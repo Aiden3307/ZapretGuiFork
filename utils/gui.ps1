@@ -1,13 +1,12 @@
-﻿# ZAPRET Service Manager WPF GUI
-
-try {
+﻿try {
     Add-Type -AssemblyName PresentationFramework
     Add-Type -AssemblyName PresentationCore
     Add-Type -AssemblyName WindowsBase
     Add-Type -AssemblyName System.Xaml
     Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
 } catch {
-    Write-Host "[ERROR] Ошибка загрузки WPF/WinForms: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[ERROR] Ошибка загрузки WPF/WinForms/Drawing: $($_.Exception.Message)" -ForegroundColor Red
     Start-Sleep -Seconds 5
     exit 1
 }
@@ -16,18 +15,21 @@ $rootDir  = Split-Path $PSScriptRoot
 $listsDir = Join-Path $rootDir "lists"
 $utilsDir = Join-Path $rootDir "utils"
 
-# Admin check
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    [System.Windows.MessageBox]::Show(
-        "Для работы GUI требуются права Администратора.`nЗапустите через Run GUI.bat.",
-        "Требуются права Администратора",
-        [System.Windows.MessageBoxButton]::OK,
-        [System.Windows.MessageBoxImage]::Warning)
-    exit 1
+    try {
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`"" -Verb RunAs
+        exit 0
+    } catch {
+        [System.Windows.MessageBox]::Show(
+            "Для работы GUI требуются права Администратора.`nНе удалось запустить с повышенными привилегиями.",
+            "Требуются права Администратора",
+            [System.Windows.MessageBoxButton]::OK,
+            [System.Windows.MessageBoxImage]::Error)
+        exit 1
+    }
 }
 
-# XAML
 $xamlString = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -37,12 +39,10 @@ $xamlString = @"
         FontFamily="Segoe UI, Arial">
 
     <Window.Resources>
-        <!-- Shared GroupBox inner Border rounding -->
         <Style TargetType="Border">
             <Setter Property="CornerRadius" Value="6"/>
         </Style>
 
-        <!-- Modern Rounded Button -->
         <Style TargetType="Button" x:Key="ModernButton">
             <Setter Property="Background" Value="#1E1E24"/>
             <Setter Property="Foreground" Value="#E2E2E6"/>
@@ -74,7 +74,6 @@ $xamlString = @"
             </Style.Triggers>
         </Style>
 
-        <!-- Accent Button -->
         <Style TargetType="Button" x:Key="AccentButton" BasedOn="{StaticResource ModernButton}">
             <Setter Property="Background" Value="#003545"/>
             <Setter Property="BorderBrush" Value="#008EA6"/>
@@ -87,7 +86,6 @@ $xamlString = @"
             </Style.Triggers>
         </Style>
 
-        <!-- Danger Button -->
         <Style TargetType="Button" x:Key="DangerButton" BasedOn="{StaticResource ModernButton}">
             <Setter Property="Background" Value="#45001A"/>
             <Setter Property="BorderBrush" Value="#A6003E"/>
@@ -100,7 +98,6 @@ $xamlString = @"
             </Style.Triggers>
         </Style>
 
-        <!-- ComboBox -->
         <Style TargetType="ComboBox">
             <Setter Property="Background" Value="#1E1E24"/>
             <Setter Property="Foreground" Value="#E2E2E6"/>
@@ -186,7 +183,6 @@ $xamlString = @"
             </Setter>
         </Style>
 
-        <!-- ComboBoxItem -->
         <Style TargetType="ComboBoxItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#E2E2E6"/>
@@ -224,7 +220,6 @@ $xamlString = @"
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
         <Border Grid.Row="0" Background="#1A1A1E" CornerRadius="8" Padding="15"
                 Margin="0,0,0,15" BorderThickness="1" BorderBrush="#26262E">
             <Grid>
@@ -249,14 +244,12 @@ $xamlString = @"
             </Grid>
         </Border>
 
-        <!-- Main Content -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="1.2*"/>
                 <ColumnDefinition Width="1.8*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left Panel -->
             <StackPanel Grid.Column="0" Margin="0,0,10,0">
                 <GroupBox Header=" Управление службой " Foreground="#8A8A96"
                           BorderBrush="#26262E" BorderThickness="1" Margin="0,0,0,15">
@@ -268,9 +261,9 @@ $xamlString = @"
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" x:Name="btnInstall" Content="Установить"
+                            <Button Grid.Column="0" x:Name="btnStart" Content="Запустить"
                                     Style="{StaticResource AccentButton}" Margin="0,0,5,0"/>
-                            <Button Grid.Column="1" x:Name="btnRemove" Content="Удалить"
+                            <Button Grid.Column="1" x:Name="btnStop" Content="Остановить"
                                     Style="{StaticResource DangerButton}" Margin="5,0,0,0"/>
                         </Grid>
                     </StackPanel>
@@ -300,7 +293,6 @@ $xamlString = @"
                 </GroupBox>
             </StackPanel>
 
-            <!-- Right Panel -->
             <Grid Grid.Column="1" Margin="10,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -309,11 +301,13 @@ $xamlString = @"
 
                 <GroupBox Grid.Row="0" Header=" Инструменты оптимизации " Foreground="#8A8A96"
                           BorderBrush="#26262E" BorderThickness="1" Margin="0,0,0,15">
-                    <UniformGrid Columns="2" Rows="2" Margin="5">
+                    <UniformGrid Columns="2" Margin="5">
                         <Button x:Name="btnAutotune"   Content="⚡ Запустить Autotune"     Style="{StaticResource ModernButton}" Margin="5" Padding="8"/>
                         <Button x:Name="btnEditLists"  Content="📝 Редактировать списки"   Style="{StaticResource ModernButton}" Margin="5" Padding="8"/>
                         <Button x:Name="btnDNS"        Content="🔒 Настроить DNS/DoH"      Style="{StaticResource ModernButton}" Margin="5" Padding="8"/>
                         <Button x:Name="btnOptimize"   Content="🌐 Отключить QUIC/Kyber"   Style="{StaticResource ModernButton}" Margin="5" Padding="8"/>
+                        <Button x:Name="btnHosts"      Content="📋 Управление обходами" Style="{StaticResource ModernButton}" Margin="5" Padding="8"/>
+                        <Button x:Name="btnShortcut"   Content="🔗 Создать ярлык" Style="{StaticResource ModernButton}" Margin="5" Padding="8"/>
                     </UniformGrid>
                 </GroupBox>
 
@@ -334,7 +328,6 @@ $stringReader = New-Object System.IO.StringReader($xamlString)
 $xmlReader    = [System.Xml.XmlReader]::Create($stringReader)
 $window       = [Windows.Markup.XamlReader]::Load($xmlReader)
 
-# Control finder (tries FindName, then LogicalTreeHelper, then manual recursion)
 function Find-Control {
     param([string]$name)
     $ctrl = $window.FindName($name)
@@ -372,17 +365,15 @@ function Find-Control {
     return & $recurse $window $name
 }
 
-# Loading-guard: suppresses SelectionChanged handlers during programmatic updates
 $script:isLoading = $false
 
-# Bind controls
 $txtCurrentStrategy = Find-Control "txtCurrentStrategy"
 $statusBadge        = Find-Control "statusBadge"
 $statusLed          = Find-Control "statusLed"
 $txtStatus          = Find-Control "txtStatus"
 $comboConfigs       = Find-Control "comboConfigs"
-$btnInstall         = Find-Control "btnInstall"
-$btnRemove          = Find-Control "btnRemove"
+$btnStart           = Find-Control "btnStart"
+$btnStop            = Find-Control "btnStop"
 $comboGameFilter    = Find-Control "comboGameFilter"
 $comboIpset         = Find-Control "comboIpset"
 $chkAutoUpdate      = Find-Control "chkAutoUpdate"
@@ -390,9 +381,9 @@ $btnAutotune        = Find-Control "btnAutotune"
 $btnEditLists       = Find-Control "btnEditLists"
 $btnDNS             = Find-Control "btnDNS"
 $btnOptimize        = Find-Control "btnOptimize"
+$btnHosts           = Find-Control "btnHosts"
+$btnShortcut        = Find-Control "btnShortcut"
 $txtLog             = Find-Control "txtLog"
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
 
 function Write-Log {
     param([string]$message, [string]$type = "info")
@@ -416,14 +407,16 @@ function Get-ConfigFiles {
 }
 
 function Refresh-Configs {
+    $oldIsLoading = $script:isLoading
+    $script:isLoading = $true
     $comboConfigs.Items.Clear()
     foreach ($f in Get-ConfigFiles) {
         $comboConfigs.Items.Add($f.BaseName) | Out-Null
     }
     if ($comboConfigs.Items.Count -gt 0) { $comboConfigs.SelectedIndex = 0 }
+    $script:isLoading = $oldIsLoading
 }
 
-# Run service.bat non-interactively by piping menu choices
 function Invoke-ServiceBat {
     param([string]$inputSequence)
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -440,7 +433,6 @@ function Invoke-ServiceBat {
     $proc.WaitForExit()
 }
 
-# Launch an external PS script and fire a callback when it exits
 function Start-WatchedProcess {
     param([string]$scriptPath, [scriptblock]$onComplete)
 
@@ -468,26 +460,102 @@ function Start-WatchedProcess {
     $t.Start()
 }
 
-# ── Settings ───────────────────────────────────────────────────────────────────
+function Get-BatArguments {
+    param([string]$batPath)
+    $lines = Get-Content $batPath
+    
+    $joinedLines = @()
+    $currentLine = ""
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if ($trimmed.EndsWith("^")) {
+            $currentLine += $trimmed.Substring(0, $trimmed.Length - 1) + " "
+        } else {
+            $currentLine += $trimmed
+            $joinedLines += $currentLine
+            $currentLine = ""
+        }
+    }
+    if ($currentLine) { $joinedLines += $currentLine }
+
+    $winwsLine = ""
+    foreach ($line in $joinedLines) {
+        if ($line -match "winws\.exe") {
+            $winwsLine = $line
+            break
+        }
+    }
+
+    if (-not $winwsLine) { return $null }
+
+    $argsStr = ""
+    if ($winwsLine -match 'winws\.exe"\s+(.*)') {
+        $argsStr = $Matches[1]
+    } elseif ($winwsLine -match 'winws\.exe\s+(.*)') {
+        $argsStr = $Matches[1]
+    } else {
+        return $null
+    }
+
+    $binPath = (Join-Path $rootDir "bin") + "\"
+    $listsPath = (Join-Path $rootDir "lists") + "\"
+    
+    $gfTCP = "12"
+    $gfUDP = "12"
+    $gameFlagFile = Join-Path $utilsDir "game_filter.enabled"
+    if (Test-Path $gameFlagFile) {
+        $mode = (Get-Content $gameFlagFile -TotalCount 1).Trim().ToLower()
+        if ($mode -eq "all") { $gfTCP = "1024-65535"; $gfUDP = "1024-65535" }
+        elseif ($mode -eq "tcp") { $gfTCP = "1024-65535"; $gfUDP = "12" }
+        elseif ($mode -eq "udp") { $gfTCP = "12"; $gfUDP = "1024-65535" }
+    }
+
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%BIN%", $binPath, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%%BIN%%", $binPath, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%LISTS%", $listsPath, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%%LISTS%%", $listsPath, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%~dp0", ($rootDir + "\"), [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%GameFilterTCP%", $gfTCP, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%GameFilterUDP%", $gfUDP, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $argsStr = [System.Text.RegularExpressions.Regex]::Replace($argsStr, "%GameFilter%", $gfTCP, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+    return $argsStr.Trim()
+}
 
 function Load-CurrentSettings {
     $script:isLoading = $true
-    # Active strategy from registry
-    $regPath  = "HKLM\System\CurrentControlSet\Services\zapret"
-    $regVal   = "zapret-discord-youtube"
-    $strategy = ""
-    try { $strategy = (Get-ItemProperty -Path "Registry::$regPath" -ErrorAction SilentlyContinue).$regVal } catch {}
-
-    if ($strategy) {
-        $txtCurrentStrategy.Text = "Установленная стратегия: $strategy"
-        for ($i = 0; $i -lt $comboConfigs.Items.Count; $i++) {
-            if ($comboConfigs.Items[$i] -eq $strategy) { $comboConfigs.SelectedIndex = $i; break }
-        }
-    } else {
-        $txtCurrentStrategy.Text = "Служба не установлена или стратегия не выбрана"
+    $activeStrategy = ""
+    $stateFile = Join-Path $utilsDir "active_strategy.txt"
+    if (Test-Path $stateFile) {
+        $activeStrategy = (Get-Content $stateFile -TotalCount 1).Trim()
+    }
+    if (-not $activeStrategy) {
+        $regPath  = "HKLM\System\CurrentControlSet\Services\zapret"
+        $regVal   = "zapret-discord-youtube"
+        try { $activeStrategy = (Get-ItemProperty -Path "Registry::$regPath" -ErrorAction SilentlyContinue).$regVal } catch {}
     }
 
-    # Game filter
+    $selectedStrategy = $activeStrategy
+    if (-not $selectedStrategy) {
+        $lastSelectedFile = Join-Path $utilsDir "last_strategy.txt"
+        if (Test-Path $lastSelectedFile) {
+            $selectedStrategy = (Get-Content $lastSelectedFile -TotalCount 1).Trim()
+        }
+    }
+
+    if ($activeStrategy) {
+        $txtCurrentStrategy.Text = "Текущая стратегия: $activeStrategy"
+    } else {
+        $txtCurrentStrategy.Text = "Обход не запущен или стратегия не выбрана"
+    }
+
+    if ($selectedStrategy) {
+        for ($i = 0; $i -lt $comboConfigs.Items.Count; $i++) {
+            if ($comboConfigs.Items[$i] -eq $selectedStrategy) { $comboConfigs.SelectedIndex = $i; break }
+        }
+    }
+
     $gameFlagFile = Join-Path $utilsDir "game_filter.enabled"
     if (Test-Path $gameFlagFile) {
         $mode = (Get-Content $gameFlagFile -TotalCount 1).Trim().ToLower()
@@ -496,10 +564,10 @@ function Load-CurrentSettings {
         $comboGameFilter.SelectedIndex = 0
     }
 
-    # IPSet
     $listFile = Join-Path $listsDir "ipset-all.txt"
     if (Test-Path $listFile) {
-        if ((Get-Item $listFile).Length -eq 0) {
+        $content = Get-Content $listFile -Raw
+        if ($null -eq $content -or [string]::IsNullOrWhiteSpace($content) -or $content.Trim() -eq "") {
             $comboIpset.SelectedIndex = 1
         } else {
             $first = [System.IO.File]::ReadLines($listFile) | Select-Object -First 1
@@ -509,12 +577,9 @@ function Load-CurrentSettings {
         $comboIpset.SelectedIndex = 2
     }
 
-    # Auto-update
     $chkAutoUpdate.IsChecked = (Test-Path (Join-Path $utilsDir "check_updates.enabled"))
     $script:isLoading = $false
 }
-
-# ── Status timer (cached brushes — no GC pressure every tick) ──────────────────
 
 $brushGreen      = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(0,   255, 135))
 $brushRed        = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255, 51,  102))
@@ -537,30 +602,78 @@ $timer.Add_Tick({
     }
 })
 
-# ── Event handlers ─────────────────────────────────────────────────────────────
-
-$btnInstall.Add_Click({
+$btnStart.Add_Click({
     $selected = $comboConfigs.SelectedItem
     if (-not $selected) { Write-Log "Сначала выберите конфигурацию." "warn"; return }
 
-    $batFiles = Get-ConfigFiles
-    $idx = $null
-    for ($i = 0; $i -lt $batFiles.Count; $i++) {
-        if ($batFiles[$i].BaseName -eq $selected) { $idx = $i + 1; break }
-    }
-    if ($null -eq $idx) { Write-Log "Конфиг файл не найден!" "error"; return }
+    $batPath = Join-Path $rootDir "${selected}.bat"
+    if (-not (Test-Path $batPath)) { Write-Log "Файл конфигурации не найден!" "error"; return }
 
-    Write-Log "Установка службы: $selected (индекс $idx)..."
-    Invoke-ServiceBat "echo admin & echo 1 & echo $idx & echo 0"
-    Write-Log "Служба успешно установлена!" "ok"
+    $argsStr = Get-BatArguments $batPath
+    if (-not $argsStr) { Write-Log "Не удалось извлечь параметры запуска из файла!" "error"; return }
+
+    $service = Get-Service -Name "zapret" -ErrorAction SilentlyContinue
+    if ($service -and $service.Status -eq "Running") {
+        Write-Log "Остановка службы для исключения конфликтов..."
+        Stop-Service "zapret" -Force -ErrorAction SilentlyContinue
+    }
+
+    $winwsProc = Get-Process -Name "winws" -ErrorAction SilentlyContinue
+    if ($winwsProc) {
+        Write-Log "Завершение работающих процессов winws..."
+        Stop-Process -Name "winws" -Force -ErrorAction SilentlyContinue
+    }
+
+    Write-Log "Запуск процесса winws со стратегией: $selected..."
+    try {
+        $stateFile = Join-Path $utilsDir "active_strategy.txt"
+        $selected | Out-File $stateFile -Encoding ASCII -Force
+
+        Start-Process -FilePath "$rootDir\bin\winws.exe" -ArgumentList $argsStr -WorkingDirectory "$rootDir\bin" -WindowStyle Hidden
+        Write-Log "Обход успешно запущен!" "ok"
+    } catch {
+        Write-Log "Ошибка при запуске: $($_.Exception.Message)" "error"
+    }
     Load-CurrentSettings
 })
 
-$btnRemove.Add_Click({
-    Write-Log "Удаление служб zapret/WinDivert..."
-    Invoke-ServiceBat "echo admin & echo 2 & echo 0"
-    Write-Log "Службы успешно остановлены и удалены!" "ok"
+function Stop-Bypass {
+    $service = Get-Service -Name "zapret" -ErrorAction SilentlyContinue
+    if ($service -and $service.Status -eq "Running") {
+        Stop-Service "zapret" -Force -ErrorAction SilentlyContinue
+    }
+    $winwsProc = Get-Process -Name "winws" -ErrorAction SilentlyContinue
+    if ($winwsProc) {
+        Stop-Process -Name "winws" -Force -ErrorAction SilentlyContinue
+    }
+    $divert = Get-Service -Name "WinDivert" -ErrorAction SilentlyContinue
+    if ($divert -and $divert.Status -eq "Running") {
+        Stop-Service "WinDivert" -Force -ErrorAction SilentlyContinue
+    }
+    $divert14 = Get-Service -Name "WinDivert14" -ErrorAction SilentlyContinue
+    if ($divert14 -and $divert14.Status -eq "Running") {
+        Stop-Service "WinDivert14" -Force -ErrorAction SilentlyContinue
+    }
+    $stateFile = Join-Path $utilsDir "active_strategy.txt"
+    if (Test-Path $stateFile) {
+        Remove-Item $stateFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$btnStop.Add_Click({
+    Write-Log "Остановка обхода..."
+    Stop-Bypass
+    Write-Log "Обход успешно остановлен!" "ok"
     Load-CurrentSettings
+})
+
+$comboConfigs.Add_SelectionChanged({
+    if ($script:isLoading) { return }
+    $selected = $comboConfigs.SelectedItem
+    if ($selected) {
+        $lastSelectedFile = Join-Path $utilsDir "last_strategy.txt"
+        $selected | Out-File $lastSelectedFile -Encoding ASCII -Force
+    }
 })
 
 $comboGameFilter.Add_SelectionChanged({
@@ -573,7 +686,7 @@ $comboGameFilter.Add_SelectionChanged({
         Write-Log "Игровой фильтр отключен."
     } else {
         $mode = switch ($index) { 1 { "all" } 2 { "tcp" } 3 { "udp" } }
-        $mode | Out-File $gameFlagFile -Encoding UTF8 -Force
+        $mode | Out-File $gameFlagFile -Encoding ASCII -Force
         Write-Log "Игровой фильтр: режим '$mode'."
     }
     Write-Log "Перезапустите службу zapret для применения!" "warn"
@@ -586,7 +699,6 @@ $comboIpset.Add_SelectionChanged({
     $listFile   = Join-Path $listsDir "ipset-all.txt"
     $backupFile = "$listFile.backup"
 
-    # Helper: back up original list if no backup exists yet
     $backupIfNeeded = {
         if ((Test-Path $listFile) -and -not (Test-Path $backupFile)) {
             Rename-Item $listFile "ipset-all.txt.backup" -Force
@@ -606,12 +718,12 @@ $comboIpset.Add_SelectionChanged({
             }
             1 {
                 & $backupIfNeeded
-                "" | Out-File $listFile -Encoding UTF8 -Force
+                [System.IO.File]::WriteAllText($listFile, "")
                 Write-Log "Режим IPSet: 'any' (обходить все сайты)."
             }
             2 {
                 & $backupIfNeeded
-                "203.0.113.113/32" | Out-File $listFile -Encoding UTF8 -Force
+                [System.IO.File]::WriteAllText($listFile, "203.0.113.113/32`r`n")
                 Write-Log "Режим IPSet: 'none' (обход отключен)."
             }
         }
@@ -624,7 +736,7 @@ $comboIpset.Add_SelectionChanged({
 $chkAutoUpdate.Add_Click({
     $flag = Join-Path $utilsDir "check_updates.enabled"
     if ($chkAutoUpdate.IsChecked) {
-        "ENABLED" | Out-File $flag -Encoding UTF8 -Force
+        "ENABLED" | Out-File $flag -Encoding ASCII -Force
         Write-Log "Автопроверка обновлений включена."
     } else {
         if (Test-Path $flag) { Remove-Item $flag -Force }
@@ -633,7 +745,10 @@ $chkAutoUpdate.Add_Click({
 })
 
 $btnAutotune.Add_Click({
-    Write-Log "Запуск Autotune..."
+    Write-Log "Запуск Autotune. Пожалуйста, подождите..."
+    $btnAutotune.IsEnabled = $false
+    $btnAutotune.Content = "⏳ Выполняется Autotune..."
+
     $bestConfigTmp = Join-Path $utilsDir "best_strategy.tmp"
     if (Test-Path $bestConfigTmp) { Remove-Item $bestConfigTmp -Force }
 
@@ -659,20 +774,24 @@ $btnAutotune.Add_Click({
             $best = Receive-Job $j
             Remove-Job $j
             $t.Stop()
+
+            $btnAutotune.IsEnabled = $true
+            $btnAutotune.Content = "⚡ Запустить Autotune"
+
             if ($best) {
-                Write-Log "Autotune завершен! Лучшая стратегия: $best" "ok"
+                Write-Log "Autotune завершен! Выбрана лучшая стратегия: $best" "ok"
                 Refresh-Configs
-                Load-CurrentSettings
-                $ans = [System.Windows.MessageBox]::Show(
-                    "Autotune определил стратегию: $best.`n`nУстановить сейчас?",
-                    "Установка стратегии",
-                    [System.Windows.MessageBoxButton]::YesNo,
-                    [System.Windows.MessageBoxImage]::Question)
-                if ($ans -eq [System.Windows.MessageBoxResult]::Yes) {
-                    for ($i = 0; $i -lt $comboConfigs.Items.Count; $i++) {
-                        if ($comboConfigs.Items[$i] -eq $best) { $comboConfigs.SelectedIndex = $i; break }
+                
+                $found = $false
+                for ($i = 0; $i -lt $comboConfigs.Items.Count; $i++) {
+                    if ($comboConfigs.Items[$i] -eq $best) {
+                        $comboConfigs.SelectedIndex = $i
+                        $found = $true
+                        break
                     }
-                    $btnInstall.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+                }
+                if (-not $found) {
+                    Write-Log "Ошибка: найденная стратегия $best не найдена в списке файлов!" "error"
                 }
             } else {
                 Write-Log "Autotune завершился без результата." "warn"
@@ -705,11 +824,491 @@ $btnOptimize.Add_Click({
     }
 })
 
-# ── Init ───────────────────────────────────────────────────────────────────────
+$btnShortcut.Add_Click({
+    try {
+        $desktopPath = [System.IO.Path]::Combine([System.Environment]::GetFolderPath("Desktop"), "ZAPRET GUI.lnk")
+        $startMenuPath = [System.IO.Path]::Combine([System.Environment]::GetFolderPath("Programs"), "ZAPRET GUI.lnk")
+        $iconLocation = Join-Path $rootDir "bin\winws.exe"
+        $guiScriptPath = Join-Path $utilsDir "gui.ps1"
+        
+        $wshShell = New-Object -ComObject WScript.Shell
+        
+        $shortcutDesktop = $wshShell.CreateShortcut($desktopPath)
+        $shortcutDesktop.TargetPath = "powershell.exe"
+        $shortcutDesktop.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$guiScriptPath`""
+        $shortcutDesktop.WorkingDirectory = $rootDir
+        if (Test-Path $iconLocation) {
+            $shortcutDesktop.IconLocation = "$iconLocation,0"
+        }
+        $shortcutDesktop.Save()
+
+        $shortcutStartMenu = $wshShell.CreateShortcut($startMenuPath)
+        $shortcutStartMenu.TargetPath = "powershell.exe"
+        $shortcutStartMenu.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$guiScriptPath`""
+        $shortcutStartMenu.WorkingDirectory = $rootDir
+        if (Test-Path $iconLocation) {
+            $shortcutStartMenu.IconLocation = "$iconLocation,0"
+        }
+        $shortcutStartMenu.Save()
+        
+        Write-Log "Ярлыки на рабочем столе и в меню Пуск успешно созданы." "ok"
+    } catch {
+        [System.Windows.MessageBox]::Show(
+            "Не удалось создать ярлык: $($_.Exception.Message)",
+            "Ошибка",
+            [System.Windows.MessageBoxButton]::OK,
+            [System.Windows.MessageBoxImage]::Error)
+        Write-Log "Ошибка создания ярлыка: $($_.Exception.Message)" "error"
+    }
+})
+
+$btnHosts.Add_Click({
+    $hostsXamlString = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Управление обходами" Height="550" Width="780"
+        Background="#121214" Foreground="#E2E2E6"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        FontFamily="Segoe UI, Arial">
+    <Window.Resources>
+        <Style TargetType="Button" x:Key="HostsBtn">
+            <Setter Property="Background" Value="#1E1E24"/>
+            <Setter Property="Foreground" Value="#E2E2E6"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#2E2E38"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#282830"/>
+                    <Setter Property="BorderBrush" Value="#00F0FF"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#15151B"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="Button" x:Key="HostsAccentBtn" BasedOn="{StaticResource HostsBtn}">
+            <Setter Property="Background" Value="#003545"/>
+            <Setter Property="BorderBrush" Value="#008EA6"/>
+            <Setter Property="Foreground" Value="#00F0FF"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#004C63"/>
+                    <Setter Property="BorderBrush" Value="#00F0FF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="Button" x:Key="HostsDangerBtn" BasedOn="{StaticResource HostsBtn}">
+            <Setter Property="Background" Value="#45001A"/>
+            <Setter Property="BorderBrush" Value="#A6003E"/>
+            <Setter Property="Foreground" Value="#FF3366"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#630026"/>
+                    <Setter Property="BorderBrush" Value="#FF3366"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="УПРАВЛЕНИЕ ОБХОДАМИ (HOSTS)" FontWeight="SemiBold" FontSize="16" Foreground="#00F0FF"/>
+            <TextBlock Text="Файл: C:\Windows\System32\drivers\etc\hosts" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+        </StackPanel>
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="220"/>
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0" x:Name="txtHostsContent" Background="#0C0C0E" Foreground="#A9A9B3"
+                     BorderBrush="#2E2E38" BorderThickness="1" FontFamily="Consolas" FontSize="12"
+                     AcceptsReturn="True" AcceptsTab="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="10"/>
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                <TextBlock Text="Быстрые действия:" FontWeight="Bold" FontSize="12" Foreground="#8A8A96" Margin="0,0,0,8"/>
+                <Button x:Name="btnHostsSave" Content="💾 Сохранить изменения" Style="{StaticResource HostsAccentBtn}" Padding="8"/>
+                <Button x:Name="btnHostsTwitch" Content="🎮 Добавить обход Twitch" Style="{StaticResource HostsBtn}" Padding="8"/>
+                <Button x:Name="btnHostsTelegram" Content="✈️ Добавить обход Telegram" Style="{StaticResource HostsBtn}" Padding="8"/>
+                <Button x:Name="btnHostsClearZapret" Content="🧹 Очистить блоки обхода" Style="{StaticResource HostsBtn}" Padding="8"/>
+                <Button x:Name="btnHostsRestore" Content="🔄 Восстановить бэкап" Style="{StaticResource HostsDangerBtn}" Padding="8"/>
+            </StackPanel>
+        </Grid>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="txtHostsStatus" Text="Готово" Foreground="#8A8A96" VerticalAlignment="Center" FontSize="11"/>
+            <Button Grid.Column="1" x:Name="btnHostsClose" Content="Закрыть" Style="{StaticResource HostsBtn}" Width="100" Margin="0"/>
+        </Grid>
+    </Grid>
+</Window>
+"@
+
+    $stringReader = New-Object System.IO.StringReader($hostsXamlString)
+    $xmlReader    = [System.Xml.XmlReader]::Create($stringReader)
+    $hostsWindow  = [Windows.Markup.XamlReader]::Load($xmlReader)
+    $hostsWindow.Owner = $window
+
+    $txtHostsContent     = $hostsWindow.FindName("txtHostsContent")
+    $btnHostsSave        = $hostsWindow.FindName("btnHostsSave")
+    $btnHostsTwitch      = $hostsWindow.FindName("btnHostsTwitch")
+    $btnHostsTelegram    = $hostsWindow.FindName("btnHostsTelegram")
+    $btnHostsClearZapret = $hostsWindow.FindName("btnHostsClearZapret")
+    $btnHostsRestore     = $hostsWindow.FindName("btnHostsRestore")
+    $btnHostsClose       = $hostsWindow.FindName("btnHostsClose")
+    $txtHostsStatus      = $hostsWindow.FindName("txtHostsStatus")
+
+    $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+
+    if (Test-Path $hostsFile) {
+        $txtHostsContent.Text = [System.IO.File]::ReadAllText($hostsFile)
+    }
+
+    $btnHostsSave.Add_Click({
+        try {
+            if (-not (Test-Path "$hostsFile.bak")) {
+                Copy-Item $hostsFile "$hostsFile.bak" -Force
+            }
+            [System.IO.File]::WriteAllText($hostsFile, $txtHostsContent.Text, [System.Text.Encoding]::UTF8)
+            ipconfig /flushdns | Out-Null
+            $txtHostsStatus.Text = "Изменения сохранены! Кэш DNS сброшен."
+            $txtHostsStatus.Foreground = $brushGreen
+            Write-Log "Файл hosts сохранен вручную. Кэш DNS сброшен." "ok"
+        } catch {
+            $txtHostsStatus.Text = "Ошибка сохранения: $($_.Exception.Message)"
+            $txtHostsStatus.Foreground = $brushRed
+            Write-Log "Ошибка сохранения hosts: $($_.Exception.Message)" "error"
+        }
+    })
+
+    $btnHostsTwitch.Add_Click({
+        $tText = $txtHostsContent.Text
+        $twitchPattern = "(?s)# === TWITCH BYPASS START ===.*?# === TWITCH BYPASS END ==="
+        if ($tText -match $twitchPattern) {
+            $tText = $tText -replace $twitchPattern, ""
+        }
+        $oldPattern = "(?s)# Twitch Bypass\r?\n(151\.101\.2\.167 [a-zA-Z0-9.-]+\r?\n)+"
+        if ($tText -match $oldPattern) {
+            $tText = $tText -replace $oldPattern, ""
+        }
+        while ($tText -match "\r\n\r\n\r\n") {
+            $tText = $tText -replace "\r\n\r\n\r\n", "`r`n`r`n"
+        }
+        $txtHostsContent.Text = $tText.TrimEnd() + "`r`n"
+        $txtHostsStatus.Text = "Домены добавлены в list-general-user.txt. Записи hosts не требуются и были удалены."
+        $txtHostsStatus.Foreground = $brushGreen
+
+        $listFile = Join-Path $listsDir "list-general-user.txt"
+        $currentDomains = @()
+        if (Test-Path $listFile) {
+            $currentDomains = Get-Content $listFile | Where-Object { $_.Trim() -ne "" }
+        }
+        $domainsToAdd = @(
+            "twitchcdn.net", "twitch.tv", "ext-twitch.tv", "assets.twitch.tv",
+            "scorecardresearch.com", "live-video.net", "gstatic.com", "jtvnw.net",
+            "amazon-adsystem.com", "cloudfront.net", "ttvnw.net"
+        )
+        $addedCount = 0
+        foreach ($d in $domainsToAdd) {
+            if ($currentDomains -notcontains $d) {
+                $currentDomains += $d
+                $addedCount++
+            }
+        }
+        if ($addedCount -gt 0) {
+            $currentDomains | Out-File $listFile -Encoding UTF8 -Force
+            Write-Log "Добавлены домены Twitch в список обхода list-general-user.txt." "ok"
+        }
+    })
+
+    $btnHostsTelegram.Add_Click({
+        $telegramBlock = @"
+# === TELEGRAM BYPASS START ===
+149.154.167.220 my.telegram.org
+149.154.167.220 oauth.telegram.org
+149.154.167.220 cdn.telesco.pe
+149.154.167.220 cdn1.telesco.pe
+149.154.167.220 cdn2.telesco.pe
+149.154.167.220 cdn3.telesco.pe
+149.154.167.220 cdn4.telesco.pe
+149.154.167.220 cdn5.telesco.pe
+149.154.167.220 core.telegram.org
+149.154.167.220 zws4.web.telegram.org
+149.154.167.220 vesta.web.telegram.org
+149.154.167.220 vesta-1.web.telegram.org
+149.154.167.220 venus-1.web.telegram.org
+149.154.167.220 telegram.me
+149.154.167.220 telegram.dog
+149.154.167.220 telegram.space
+149.154.167.220 telesco.pe
+149.154.167.220 tg.dev
+149.154.167.220 telegram.org
+149.154.167.220 t.me
+149.154.167.220 api.telegram.org
+149.154.167.220 td.telegram.org
+149.154.167.220 venus.web.telegram.org
+149.154.167.220 web.telegram.org
+# === TELEGRAM BYPASS END ===
+"@
+        $tText = $txtHostsContent.Text
+        $tgPattern = "(?s)# === TELEGRAM BYPASS START ===.*?# === TELEGRAM BYPASS END ==="
+        if ($tText -match $tgPattern) {
+            $tText = $tText -replace $tgPattern, $telegramBlock
+        } else {
+            $tText = $tText.TrimEnd() + "`r`n`r`n" + $telegramBlock + "`r`n"
+        }
+        $txtHostsContent.Text = $tText
+        $txtHostsStatus.Text = "Добавлены записи Telegram в поле! Сохраните изменения."
+        $txtHostsStatus.Foreground = $brushGreen
+
+        $listFile = Join-Path $listsDir "list-general-user.txt"
+        $currentDomains = @()
+        if (Test-Path $listFile) {
+            $currentDomains = Get-Content $listFile | Where-Object { $_.Trim() -ne "" }
+        }
+        $domainsToAdd = @("telegram.org", "t.me", "telegram.me")
+        $addedCount = 0
+        foreach ($d in $domainsToAdd) {
+            if ($currentDomains -notcontains $d) {
+                $currentDomains += $d
+                $addedCount++
+            }
+        }
+        if ($addedCount -gt 0) {
+            $currentDomains | Out-File $listFile -Encoding UTF8 -Force
+            Write-Log "Добавлены домены Telegram в список обхода list-general-user.txt." "ok"
+        }
+    })
+
+
+
+    $btnHostsClearZapret.Add_Click({
+        $tText = $txtHostsContent.Text
+        $p1 = "(?s)\r?\n?\r?\n?# === ZAPRET HOSTS START ===.*?# === ZAPRET HOSTS END ===\r?\n?"
+        $p2 = "(?s)\r?\n?\r?\n?# === TWITCH BYPASS START ===.*?# === TWITCH BYPASS END ===\r?\n?"
+        $p3 = "(?s)\r?\n?\r?\n?# === TELEGRAM BYPASS START ===.*?# === TELEGRAM BYPASS END ===\r?\n?"
+        $tText = $tText -replace $p1, ""
+        $tText = $tText -replace $p2, ""
+        $tText = $tText -replace $p3, ""
+        $txtHostsContent.Text = $tText.TrimEnd() + "`r`n"
+        $txtHostsStatus.Text = "Все блоки ZAPRET очищены из поля! Сохраните изменения."
+        $txtHostsStatus.Foreground = $brushGreen
+    })
+
+    $btnHostsRestore.Add_Click({
+        $bakFile = "$hostsFile.bak"
+        if (Test-Path $bakFile) {
+            $txtHostsContent.Text = [System.IO.File]::ReadAllText($bakFile)
+            $txtHostsStatus.Text = "Резервная копия восстановлена в поле! Сохраните изменения."
+            $txtHostsStatus.Foreground = $brushGreen
+        } else {
+            $txtHostsStatus.Text = "Бэкап hosts.bak не найден!"
+            $txtHostsStatus.Foreground = $brushRed
+        }
+    })
+
+    $btnHostsClose.Add_Click({
+        $hostsWindow.Close()
+    })
+
+    [void]$hostsWindow.ShowDialog()
+})
+
+$script:notifyIcon = New-Object System.Windows.Forms.NotifyIcon
+try {
+    $iconPath = Join-Path $rootDir "bin\winws.exe"
+    if (Test-Path $iconPath) {
+        $script:notifyIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+    } else {
+        $script:notifyIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+    }
+} catch {
+    $script:notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
+}
+$script:notifyIcon.Text = "ZAPRET Service Manager"
+$script:notifyIcon.Visible = $false
+
+$contextMenu = New-Object System.Windows.Forms.ContextMenu
+$menuRestore = New-Object System.Windows.Forms.MenuItem("Открыть")
+$menuExit = New-Object System.Windows.Forms.MenuItem("Выход")
+$contextMenu.MenuItems.AddRange(@($menuRestore, $menuExit))
+$script:notifyIcon.ContextMenu = $contextMenu
+
+$menuRestore.add_Click({
+    $window.Dispatcher.Invoke([Action]{
+        $window.WindowState = [System.Windows.WindowState]::Normal
+        $script:notifyIcon.Visible = $false
+        if ($script:dispatcherFrame) {
+            $script:dispatcherFrame.Continue = $false
+        }
+    })
+})
+
+$menuExit.add_Click({
+    $script:notifyIcon.Visible = $false
+    $script:notifyIcon.Dispose()
+    Stop-Bypass
+    [System.Environment]::Exit(0)
+})
+
+$script:notifyIcon.add_MouseClick({
+    param($sender, $e)
+    if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+        $window.Dispatcher.Invoke([Action]{
+            $window.WindowState = [System.Windows.WindowState]::Normal
+            $script:notifyIcon.Visible = $false
+            if ($script:dispatcherFrame) {
+                $script:dispatcherFrame.Continue = $false
+            }
+        })
+    }
+})
+
+$window.add_Closing({
+    param($sender, $e)
+    $e.Cancel = $true
+    
+    $exitXaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Выход из программы" Height="150" Width="380"
+        Background="#121214" Foreground="#E2E2E6"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        FontFamily="Segoe UI, Arial">
+    <Window.Resources>
+        <Style TargetType="Button" x:Key="ExitBtn">
+            <Setter Property="Background" Value="#1E1E24"/>
+            <Setter Property="Foreground" Value="#E2E2E6"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#2E2E38"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#282830"/>
+                    <Setter Property="BorderBrush" Value="#8A8A96"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#15151B"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="Button" x:Key="ExitAccentBtn" BasedOn="{StaticResource ExitBtn}">
+            <Setter Property="Background" Value="#003545"/>
+            <Setter Property="BorderBrush" Value="#008EA6"/>
+            <Setter Property="Foreground" Value="#00F0FF"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#004C63"/>
+                    <Setter Property="BorderBrush" Value="#00F0FF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="Button" x:Key="ExitDangerBtn" BasedOn="{StaticResource ExitBtn}">
+            <Setter Property="Background" Value="#45001A"/>
+            <Setter Property="BorderBrush" Value="#A6003E"/>
+            <Setter Property="Foreground" Value="#FF3366"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#630026"/>
+                    <Setter Property="BorderBrush" Value="#FF3366"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="Закрыть программу полностью или свернуть в трей?" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="#E2E2E6"/>
+        <UniformGrid Grid.Row="1" Columns="3" Rows="1">
+            <Button x:Name="btnExitClose" Content="Закрыть" Margin="5" Style="{StaticResource ExitDangerBtn}"/>
+            <Button x:Name="btnExitTray" Content="В трей" Margin="5" Style="{StaticResource ExitAccentBtn}"/>
+            <Button x:Name="btnExitCancel" Content="Отмена" Margin="5" Style="{StaticResource ExitBtn}"/>
+        </UniformGrid>
+    </Grid>
+</Window>
+"@
+    $sr = New-Object System.IO.StringReader($exitXaml)
+    $xr = [System.Xml.XmlReader]::Create($sr)
+    $exitWin = [Windows.Markup.XamlReader]::Load($xr)
+    $exitWin.Owner = $window
+    
+    $btnExitClose = $exitWin.FindName("btnExitClose")
+    $btnExitTray = $exitWin.FindName("btnExitTray")
+    $btnExitCancel = $exitWin.FindName("btnExitCancel")
+    
+    $btnExitClose.add_Click({
+        $script:notifyIcon.Visible = $false
+        $script:notifyIcon.Dispose()
+        $exitWin.Close()
+        $timer.Stop()
+        Stop-Bypass
+        [System.Environment]::Exit(0)
+    })
+    
+    $btnExitTray.add_Click({
+        $script:notifyIcon.Visible = $true
+        $window.Hide()
+        $exitWin.Close()
+    })
+    
+    $btnExitCancel.add_Click({
+        $exitWin.Close()
+    })
+    
+    [void]$exitWin.ShowDialog()
+})
 
 Write-Log "Запуск GUI менеджера..."
 Refresh-Configs
 Load-CurrentSettings
 $timer.Start()
 
-[void]$window.ShowDialog()
+while ($true) {
+    [void]$window.ShowDialog()
+    
+    if ($script:notifyIcon.Visible) {
+        $script:dispatcherFrame = New-Object System.Windows.Threading.DispatcherFrame
+        [System.Windows.Threading.Dispatcher]::PushFrame($script:dispatcherFrame)
+    } else {
+        break
+    }
+}

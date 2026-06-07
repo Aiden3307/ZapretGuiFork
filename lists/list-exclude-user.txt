@@ -1,1 +1,8 @@
-domain.example.abc
+﻿domain.example.abc
+jtvnw.net
+twitchcdn.net
+ext-twitch.tv
+assets.twitch.tv
+amazon-adsystem.com
+cloudfront.net
+scorecardresearch.com

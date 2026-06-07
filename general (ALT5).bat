@@ -1,7 +1,5 @@
-@echo off
+﻿@echo off
 chcp 65001 > nul
-:: 65001 - UTF-8
-:: NOT RECOMMENDED
 
 cd /d "%~dp0"
 call service.bat status_zapret

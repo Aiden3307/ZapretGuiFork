@@ -1,5 +1,4 @@
-﻿# Console List Editor for Zapret
-$rootDir = Split-Path $PSScriptRoot
+﻿$rootDir = Split-Path $PSScriptRoot
 $listsDir = Join-Path $rootDir "lists"
 
 function Show-Header {
@@ -14,7 +13,6 @@ function Edit-ListFile {
 
     $filePath = Join-Path $listsDir $fileName
     if (-not (Test-Path $filePath)) {
-        # Initialize file if not found
         "" | Out-File $filePath -Encoding UTF8
     }
 
@@ -24,7 +22,6 @@ function Edit-ListFile {
         Write-Host "Файл: $filePath" -ForegroundColor DarkGray
         Write-Host "---------------------------------------------" -ForegroundColor DarkCyan
 
-        # Read domains
         $items = @()
         if (Test-Path $filePath) {
             $items = Get-Content $filePath | Where-Object { $_.Trim() -ne "" -and -not $_.StartsWith("#") }
@@ -111,7 +108,6 @@ function Edit-ListFile {
     }
 }
 
-# Main menu loop
 while ($true) {
     Show-Header
     Write-Host "Выберите список для редактирования:" -ForegroundColor Yellow

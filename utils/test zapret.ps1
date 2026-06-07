@@ -12,7 +12,7 @@ $utilsDir = Join-Path $rootDir "utils"
 $resultsDir = Join-Path $utilsDir "test results"
 if (-not (Test-Path $resultsDir)) { New-Item -ItemType Directory -Path $resultsDir | Out-Null }
 
-# Define functions early
+ Define functions early
 function Get-IpsetStatus {
     $listFile = Join-Path $listsDir "ipset-all.txt"
     if (-not (Test-Path $listFile)) { return "none" }
@@ -27,14 +27,14 @@ function Set-IpsetMode {
     $listFile = Join-Path $listsDir "ipset-all.txt"
     $backupFile = Join-Path $listsDir "ipset-all.test-backup.txt"
     if ($mode -eq "any") {
-        # Always backup current file (even if none)
+         Always backup current file (even if none)
         if (Test-Path $listFile) {
             Copy-Item $listFile $backupFile -Force
         } else {
-            # If none, create empty backup
+             f none, create empty backup
             "" | Out-File $backupFile -Encoding UTF8
         }
-        # Make file empty
+        ake file empty
         "" | Out-File $listFile -Encoding UTF8
     } elseif ($mode -eq "restore") {
         if (Test-Path $backupFile) {
@@ -58,7 +58,7 @@ function Add-OrSet {
     if ($dict.Contains($key)) { $dict[$key] = $val } else { $dict.Add($key, $val) }
 }
 
-# Convert raw target value to structured target (supports PING:ip for ping-only targets)
+ Convert raw target value to structured target (supports PING:ip for ping-only targets)
 function Convert-Target {
     param(
         [string]$Name,
@@ -81,7 +81,7 @@ function Convert-Target {
     })
 }
 
-# DPI checker defaults (override via MONITOR_* env vars like in monitor.ps1)
+ DPI checker defaults (override via MONITOR_* env vars like in monitor.ps1)
 $dpiTimeoutSeconds = 5
 $dpiRangeBytes = 65536
 $dpiMaxParallel = 8
@@ -91,8 +91,8 @@ if ($env:MONITOR_RANGE) { [int]$dpiRangeBytes = $env:MONITOR_RANGE }
 if ($env:MONITOR_MAX_PARALLEL) { [int]$dpiMaxParallel = $env:MONITOR_MAX_PARALLEL }
 
 function Get-DpiSuite {
-    # Suite sourced from https://github.com/hyperion-cs/dpi-checkers (Apache-2.0 license)
-    # Original copyright retained from dpi-checkers repository
+     Suite sourced from https://github.com/hyperion-cs/dpi-checkers (Apache-2.0 license)
+     iginal copyright retained from dpi-checkers repository
     $url = "https://hyperion-cs.github.io/dpi-checkers/ru/tcp-16-20/suite.v2.json"
 
     try {
@@ -255,7 +255,7 @@ function Invoke-DpiSuite {
 
     $results = @()
     foreach ($rs in $runspaces) {
-        # Wait for the runspace to complete with a small grace period beyond curl's timeout
+         ait for the runspace to complete with a small grace period beyond curl's timeout
         try {
             $waitMs = ([int]$TimeoutSeconds + 5) * 1000
             $handle = $rs.Handle
@@ -267,7 +267,7 @@ function Invoke-DpiSuite {
                 }
             }
         } catch {
-            # ignore wait errors and attempt to EndInvoke
+             ignore ait errors and attempt to EndInvoke
         }
 
         try {
@@ -321,7 +321,7 @@ function Test-ZapretServiceConflict {
     return [bool](Get-Service -Name "zapret" -ErrorAction SilentlyContinue)
 }
 
-# Check Admin
+#Check Adin
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "[ERROR] Run as Administrator to execute tests" -ForegroundColor Red
@@ -330,7 +330,7 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
     Write-Host "[OK] Administrator rights detected" -ForegroundColor Green
 }
 
-# Check curl
+# heck cul
 if (-not (Get-Command "curl.exe" -ErrorAction SilentlyContinue)) {
     Write-Host "[ERROR] curl.exe not found" -ForegroundColor Red
     Write-Host "Install curl or add it to PATH" -ForegroundColor Yellow
@@ -339,7 +339,7 @@ if (-not (Get-Command "curl.exe" -ErrorAction SilentlyContinue)) {
     Write-Host "[OK] curl.exe found" -ForegroundColor Green
 }
 
-# Check for leftover ipset flag from previous interrupted run
+# Checkfor eftover ipset flag from previous interrupted run
 $ipsetFlagFile = Join-Path $rootDir "ipset_switched.flag"
 if (Test-Path $ipsetFlagFile) {
     Write-Host "[INFO] Detected leftover ipset switch flag. Restoring ipset..." -ForegroundColor Yellow
@@ -347,10 +347,10 @@ if (Test-Path $ipsetFlagFile) {
     Remove-Item -Path $ipsetFlagFile -ErrorAction SilentlyContinue
 }
 
-# Get original ipset status early
+# Get orginl ipset status early
 $originalIpsetStatus = Get-IpsetStatus
 
-# Warn about ipset switching and X button behavior
+# Warn abt ipset switching and X button behavior
 if ($originalIpsetStatus -ne "any") {
     Write-Host "[INFO] Current ipset status: $originalIpsetStatus" -ForegroundColor Cyan
     Write-Host "[WARNING] Ipset will be switched to 'any' for accurate DPI tests." -ForegroundColor Yellow
@@ -358,7 +358,7 @@ if ($originalIpsetStatus -ne "any") {
     Write-Host "[WARNING] It will be restored automatically on the next script run." -ForegroundColor Yellow
 }
 
-# Check if zapret service installed
+# Checkifzapret service installed
 if (Test-ZapretServiceConflict) {
     Write-Host "[ERROR] Windows service 'zapret' is installed" -ForegroundColor Red
     Write-Host "         Remove the service before running tests" -ForegroundColor Yellow
@@ -378,14 +378,14 @@ if ($hasErrors) {
 
 $dpiTargets = Build-DpiTargets -CustomHost $dpiCustomHost
 
-# Config
-$targetDir = $rootDir
+# Confi
+targetDir = $rootDir
 if (-not $targetDir) { $targetDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 $batFiles = Get-ChildItem -Path $targetDir -Filter "*.bat" | Where-Object { $_.Name -notlike "service*" } | Sort-Object { [Regex]::Replace($_.Name, "(\d+)", { $args[0].Value.PadLeft(8, "0") }) }
 
 $globalResults = @()
 
-# Select top-level test type (standard vs DPI checkers)
+# Selecttoplevel test type (standard vs DPI checkers)
 function Read-TestType {
     while ($true) {
         Write-Host ""
@@ -401,7 +401,7 @@ function Read-TestType {
     }
 }
 
-# Select test mode: all configs or custom subset
+# Select es mode: all configs or custom subset
 function Read-ModeSelection {
     while ($true) {
         Write-Host ""
@@ -482,7 +482,7 @@ function Read-ConfigSelection {
             continue
         }
 
-        # Checker
+         Checker
          Write-Host "Selected configs: $($valid -join ', ')" -ForegroundColor Green
         if ($hasErrors) {
             Write-Host "Some entries were skipped due to errors (see warnings above)." -ForegroundColor Yellow
@@ -506,7 +506,7 @@ if ($mode -eq 'select' -and -not $Silent) {
     $batFiles = @($selected)
 }
 
-# Load targets once for standard mode
+ Load targets once for standard mode
 $targetList = @()
 $maxNameLen = 10
 if ($testType -eq 'standard') {
@@ -553,7 +553,7 @@ if ($testType -eq 'standard') {
     if (-not $maxNameLen -or $maxNameLen -lt 10) { $maxNameLen = 10 }
 }
 
-# Ensure we have configs to run
+ Ensure we have configs to run
 if (-not $batFiles -or $batFiles.Count -eq 0) {
     Write-Host "[ERROR] No general*.bat files found" -ForegroundColor Red
     Write-Host "Press any key to exit..." -ForegroundColor Yellow
@@ -561,12 +561,12 @@ if (-not $batFiles -or $batFiles.Count -eq 0) {
     exit 1
 }
 
-# Stop winws
+ top winws
 function Stop-Zapret {
     Get-Process -Name "winws" -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 
-# Capture/restore running winws instances to return user ipset/config
+#apture/restore running winws instances to return user ipset/config
 function Get-WinwsSnapshot {
     try {
         return Get-CimInstance Win32_Process -Filter "Name='winws.exe'" |
@@ -588,7 +588,7 @@ function Restore-WinwsSnapshot {
     foreach ($p in $snapshot) {
         if (-not $p.ExecutablePath) { continue }
 
-        # Skip if an identical command line is already active
+         Skip if an identical command line is already active
         if ($current -and $current -contains $p.CommandLine) { continue }
 
         $exe = $p.ExecutablePath
@@ -617,11 +617,11 @@ Write-Host "                 Total configs: $($batFiles.Count.ToString().PadLeft
 Write-Host "============================================================" -ForegroundColor Cyan
 
 try {
-    # Save original ipset status and switch to 'any' for accurate DPI tests
+     Save original ipset status and switch to 'any' for accurate DPI tests
     if (($originalIpsetStatus -ne "any") -and ($testType -eq 'dpi')) {
         Write-Host "[WARNING] Ipset is in '$originalIpsetStatus' mode. Switching to 'any' for accurate DPI tests..." -ForegroundColor Yellow
         Set-IpsetMode -mode "any"
-        # Create flag file to indicate ipset was switched
+         Create flag file to indicate ipset was switched
         "" | Out-File -FilePath $ipsetFlagFile -Encoding UTF8
     }
     Write-Host "[WARNING] Tests may take several minutes to complete. Please wait..." -ForegroundColor Yellow
@@ -634,20 +634,20 @@ try {
     Write-Host "  [$configNum/$($batFiles.Count)] $($file.Name)" -ForegroundColor Yellow
     Write-Host "------------------------------------------------------------" -ForegroundColor DarkCyan
     
-    # Cleanup
+    # eanup
     Stop-Zapret
     
-    # Start config
+     tart config
     Write-Host "  > Starting config..." -ForegroundColor Cyan
     $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$($file.FullName)`"" -WorkingDirectory $targetDir -PassThru -WindowStyle Minimized
     
-    # Wait init
+     Wait int
     Start-Sleep -Seconds 5
     
     if ($testType -eq 'standard') {
         $curlTimeoutSeconds = 5
 
-        # Parallel target checks via runspace pool (faster than jobs)
+        #Paralleltarget checks via runspace pool (faster than jobs)
         $maxParallel = 8
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $maxParallel)
         $runspacePool.Open()
@@ -750,8 +750,8 @@ try {
                     }
                 }
             } catch {
-                # ignore
-            }
+                # gnore
+           }
 
             try {
                 $targetResults += $rs.Powershell.EndInvoke($rs.Handle)
@@ -791,7 +791,7 @@ try {
                 Write-Host "$($res.PingResult)" -NoNewline -ForegroundColor $pingColor
                 Write-Host ""
             } else {
-                # Ping-only target
+                # Ping-nly arget
                 Write-Host " Ping: " -NoNewline -ForegroundColor DarkGray
                 if ($res.PingResult -eq "Timeout") {
                     $pingColor = "Red"
@@ -811,14 +811,14 @@ try {
     }
     
     # Stop
-    Stop-Zapret
+   top-Zapret
     if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
 }
 
     Write-Host ""
     Write-Host "All tests finished." -ForegroundColor Green
 
-    # Analytics
+    # Analyti
     $analytics = @{}
     foreach ($res in $globalResults) {
         if ($res.Type -eq 'standard') {
@@ -860,7 +860,7 @@ try {
         }
     }
 
-    # Determine best strategy
+    # Deterin best strategy
     $bestConfig = $null
     $maxScore = 0
     $maxPing = -1
@@ -890,10 +890,10 @@ try {
         $bestConfig | Out-File (Join-Path $utilsDir "best_strategy.tmp") -Encoding UTF8
     }
 
-    # Save to file
+    # Save o ile
     $dateStr = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
     $resultFile = Join-Path $resultsDir "test_results_$dateStr.txt"
-    # Clear file
+    # Clear ile
     "" | Out-File $resultFile -Encoding UTF8
     foreach ($res in $globalResults) {
         $config = $res.Config
@@ -931,7 +931,7 @@ try {
         Add-Content $resultFile ""
     }
 
-    # Add analytics
+    # Add anaytcs
     Add-Content $resultFile "=== ANALYTICS ==="
     foreach ($config in $analytics.Keys) {
         $a = $analytics[$config]

@@ -1,8 +1,4 @@
-﻿# Browser Optimizer (Disables QUIC and Kyber)
-# Must run as Administrator
-
-# Check Admin
-$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+﻿$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "[ERROR] Требуются права Администратора!" -ForegroundColor Red
     Start-Sleep -Seconds 3
@@ -47,16 +43,13 @@ if ($choice -eq "1") {
         
         Write-Host "Настройка политик для $name..." -ForegroundColor DarkGray
         
-        # Ensure path exists
         if (-not (Test-Path $path)) {
             New-Item -Path $path -Force | Out-Null
         }
         
-        # Disable QUIC
         Set-ItemProperty -Path $path -Name "QuicAllowed" -Value 0 -Type DWord -Force
         Write-Host "  [OK] QUIC отключен (QuicAllowed = 0)" -ForegroundColor Green
         
-        # Disable Kyber (only for Chrome and Edge)
         if ($name -eq "Chrome" -or $name -eq "Edge") {
             Set-ItemProperty -Path $path -Name "PostQuantumKeyAgreementEnabled" -Value 0 -Type DWord -Force
             Write-Host "  [OK] Kyber отключен (PostQuantumKeyAgreementEnabled = 0)" -ForegroundColor Green
@@ -76,13 +69,11 @@ if ($choice -eq "1") {
         if (Test-Path $path) {
             Write-Host "Откат настроек для $name..." -ForegroundColor DarkGray
             
-            # Remove properties
             Remove-ItemProperty -Path $path -Name "QuicAllowed" -ErrorAction SilentlyContinue
             if ($name -eq "Chrome" -or $name -eq "Edge") {
                 Remove-ItemProperty -Path $path -Name "PostQuantumKeyAgreementEnabled" -ErrorAction SilentlyContinue
             }
             
-            # If folder is now empty, delete it
             $properties = Get-ItemProperty -Path $path
             $propNames = $properties.PSObject.Properties | Where-Object { $_.Name -notin "PSPath","PSParentPath","PSChildName","PSDrive","PSProvider" }
             if ($propNames.Count -eq 0) {

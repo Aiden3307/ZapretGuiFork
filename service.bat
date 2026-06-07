@@ -1,7 +1,6 @@
-@echo off
+﻿@echo off
 set "LOCAL_VERSION=1.9.9a"
 
-:: External commands
 if "%~1"=="status_zapret" (
     call :test_service zapret soft
     call :tcp_enable
@@ -51,7 +50,6 @@ if "%1"=="admin" (
 )
 
 
-:: MENU ================================
 setlocal EnableDelayedExpansion
 :menu
 cls
@@ -116,7 +114,6 @@ if "%menu_choice%"=="0" exit /b
 goto menu
 
 
-:: LOAD USER LISTS =====================
 :load_user_lists
 set "LISTS_PATH=%~dp0lists\"
 
@@ -133,14 +130,12 @@ if not exist "%LISTS_PATH%list-exclude-user.txt" (
 exit /b
 
 
-:: TCP ENABLE ==========================
 :tcp_enable
 chcp 437 > nul
 netsh interface tcp show global | findstr /i "timestamps" | findstr /i "enabled" > nul || netsh interface tcp set global timestamps=enabled > nul 2>&1
 exit /b
 
 
-:: STATUS ==============================
 :service_status
 cls
 chcp 437 > nul
@@ -193,7 +188,6 @@ if "%ServiceStatus%"=="RUNNING" (
 exit /b
 
 
-:: REMOVE ==============================
 :service_remove
 cls
 chcp 65001 > nul
@@ -228,19 +222,16 @@ pause
 goto menu
 
 
-:: INSTALL =============================
 :service_install
 cls
 chcp 437 > nul
 
-:: Main
 cd /d "%~dp0"
 set "BIN_PATH=%~dp0bin\"
 set "LISTS_PATH=%~dp0lists\"
 
 if defined selectedFile goto skip_file_selection
 
-:: Searching for .bat files in current folder, except files that start with "service"
 echo Pick one of the options:
 set "count=0"
 for /f "delims=" %%F in ('powershell -NoProfile -Command "Get-ChildItem -LiteralPath '.' -Filter '*.bat' | Where-Object { $_.Name -notlike 'service*' } | Sort-Object { [Regex]::Replace($_.Name, '(\d+)', { $args[0].Value.PadLeft(8, '0') }) } | ForEach-Object { $_.Name }"') do (
@@ -249,7 +240,6 @@ for /f "delims=" %%F in ('powershell -NoProfile -Command "Get-ChildItem -Literal
     set "file!count!=%%F"
 )
 
-:: Choosing file
 set "choice="
 set /p "choice=Input file index (number): "
 if "!choice!"=="" (
@@ -267,10 +257,8 @@ if not defined selectedFile (
 
 :skip_file_selection
 
-:: Args that should be followed by value
 set "args_with_value=sni host altorder"
 
-:: Parsing args (mergeargs: 2=start param|3=arg with value|1=params args|0=default)
 set "args="
 set "capture=0"
 set "mergeargs=0"
@@ -351,7 +339,6 @@ for /f "tokens=*" %%a in ('type "!selectedFile!"') do (
     )
 )
 
-:: Creating service with parsed args
 call :tcp_enable
 
 set ARGS=%args%
@@ -373,20 +360,16 @@ pause
 goto menu
 
 
-:: CHECK UPDATES =======================
 :service_check_updates
 chcp 437 > nul
 cls
 
-:: Set current version and URLs
 set "GITHUB_VERSION_URL=https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/main/.service/version.txt"
 set "GITHUB_RELEASE_URL=https://github.com/Flowseal/zapret-discord-youtube/releases/tag/"
 set "GITHUB_DOWNLOAD_URL=https://github.com/Flowseal/zapret-discord-youtube/releases/latest"
 
-:: Get the latest version from GitHub
 for /f "delims=" %%A in ('powershell -NoProfile -Command "(Invoke-WebRequest -Uri \"%GITHUB_VERSION_URL%\" -Headers @{\"Cache-Control\"=\"no-cache\"} -UseBasicParsing -TimeoutSec 5).Content.Trim()" 2^>nul') do set "GITHUB_VERSION=%%A"
 
-:: Error handling
 if not defined GITHUB_VERSION (
     echo Warning: failed to fetch the latest version. This warning does not affect the operation of zapret
     timeout /T 9
@@ -394,7 +377,6 @@ if not defined GITHUB_VERSION (
     goto menu
 )
 
-:: Version comparison
 if "%LOCAL_VERSION%"=="%GITHUB_VERSION%" (
     echo Latest version installed: %LOCAL_VERSION%
     
@@ -416,12 +398,10 @@ goto menu
 
 
 
-:: DIAGNOSTICS =========================
 :service_diagnostics
 chcp 437 > nul
 cls
 
-:: Base Filtering Engine
 sc query BFE | findstr /I "RUNNING" > nul
 if !errorlevel!==0 (
     call :PrintGreen "Base Filtering Engine check passed"
@@ -430,7 +410,6 @@ if !errorlevel!==0 (
 )
 echo:
 
-:: Proxy check
 set "proxyEnabled=0"
 set "proxyServer="
 
@@ -450,7 +429,6 @@ if !proxyEnabled!==1 (
 )
 echo:
 
-:: TCP timestamps check
 netsh interface tcp show global | findstr /i "timestamps" | findstr /i "enabled" > nul
 if !errorlevel!==0 (
     call :PrintGreen "TCP timestamps check passed"
@@ -465,7 +443,6 @@ if !errorlevel!==0 (
 )
 echo:
 
-:: AdguardSvc.exe
 tasklist /FI "IMAGENAME eq AdguardSvc.exe" | find /I "AdguardSvc.exe" > nul
 if !errorlevel!==0 (
     call :PrintRed "[X] Adguard process found. Adguard may cause problems with Discord"
@@ -475,7 +452,6 @@ if !errorlevel!==0 (
 )
 echo:
 
-:: Killer
 sc query | findstr /I "Killer" > nul
 if !errorlevel!==0 (
     call :PrintRed "[X] Killer services found. Killer conflicts with zapret"
@@ -485,7 +461,6 @@ if !errorlevel!==0 (
 )
 echo:
 
-:: Intel Connectivity Network Service
 sc query | findstr /I "Intel" | findstr /I "Connectivity" | findstr /I "Network" > nul
 if !errorlevel!==0 (
     call :PrintRed "[X] Intel Connectivity Network Service found. It conflicts with zapret"
@@ -495,7 +470,6 @@ if !errorlevel!==0 (
 )
 echo:
 
-:: Check Point
 set "checkpointFound=0"
 sc query | findstr /I "TracSrvWrapper" > nul
 if !errorlevel!==0 (
@@ -515,7 +489,6 @@ if !checkpointFound!==1 (
 )
 echo:
 
-:: SmartByte
 sc query | findstr /I "SmartByte" > nul
 if !errorlevel!==0 (
     call :PrintRed "[X] SmartByte services found. SmartByte conflicts with zapret"
@@ -525,14 +498,12 @@ if !errorlevel!==0 (
 )
 echo:
 
-:: WinDivert64.sys file
 set "BIN_PATH=%~dp0bin\"
 if not exist "%BIN_PATH%\*.sys" (
     call :PrintRed "WinDivert64.sys file NOT found."
     echo:
 )
 
-:: VPN
 set "VPN_SERVICES="
 sc query | findstr /I "VPN" > nul
 if !errorlevel!==0 (
@@ -550,7 +521,6 @@ if !errorlevel!==0 (
 )
 echo:
 
-:: DNS
 set "dohfound=0"
 for /f "delims=" %%a in ('powershell -NoProfile -Command "Get-ChildItem -Recurse -Path 'HKLM:System\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\' | Get-ItemProperty | Where-Object { $_.DohFlags -gt 0 } | Measure-Object | Select-Object -ExpandProperty Count"') do (
     if %%a gtr 0 (
@@ -565,7 +535,6 @@ if !dohfound!==0 (
 )
 echo:
 
-:: Hosts file check
 set "hostsFile=%SystemRoot%\System32\drivers\etc\hosts"
 if exist "%hostsFile%" (
     set "yt_found=0"
@@ -576,7 +545,6 @@ if exist "%hostsFile%" (
     )
 )
 
-:: WinDivert conflict
 tasklist /FI "IMAGENAME eq winws.exe" | find /I "winws.exe" > nul
 set "winws_running=!errorlevel!"
 
@@ -631,7 +599,6 @@ if !winws_running! neq 0 if !windivert_running!==0 (
     echo:
 )
 
-:: Conflicting bypasses
 set "conflicting_services=GoodbyeDPI discordfix_zapret winws1 winws2"
 set "found_any_conflict=0"
 set "found_conflicts="
@@ -677,7 +644,6 @@ if !found_any_conflict!==1 (
     echo:
 )
 
-:: Discord cache clearing
 set "CHOICE="
 set /p "CHOICE=Do you want to clear the Discord cache? (Y/N) (default: Y)  "
 if "!CHOICE!"=="" set "CHOICE=Y"
@@ -717,7 +683,6 @@ pause
 goto menu
 
 
-:: GAME SWITCH ========================
 :game_switch_status
 chcp 437 > nul
 
@@ -792,7 +757,6 @@ pause
 goto menu
 
 
-:: CHECK UPDATES SWITCH =================
 :check_updates_switch_status
 chcp 437 > nul
 
@@ -822,7 +786,6 @@ pause
 goto menu
 
 
-:: IPSET SWITCH =======================
 :ipset_switch_status
 chcp 437 > nul
 
@@ -867,7 +830,6 @@ if "%IPsetStatus%"=="loaded" (
     echo Switching to any mode...
     
     >"%listFile%" (
-        rem Creating empty file
     )
     
 ) else if "%IPsetStatus%"=="any" (
@@ -888,7 +850,6 @@ pause
 goto menu
 
 
-:: IPSET UPDATE =======================
 :ipset_update
 chcp 437 > nul
 cls
@@ -921,7 +882,6 @@ pause
 goto menu
 
 
-:: HOSTS UPDATE =======================
 :hosts_update
 chcp 437 > nul
 cls
@@ -968,12 +928,10 @@ pause
 goto menu
 
 
-:: RUN TESTS =============================
 :run_tests
 chcp 437 >nul
 cls
 
-:: Require PowerShell 3.0+
 powershell -NoProfile -Command "if ($PSVersionTable -and $PSVersionTable.PSVersion -and $PSVersionTable.PSVersion.Major -ge 3) { exit 0 } else { exit 1 }" >nul 2>&1
 if %errorLevel% neq 0 (
     echo PowerShell 3.0 or newer is required.
@@ -990,7 +948,6 @@ pause
 goto menu
 
 
-:: AUTOTUNE ============================
 :service_autotune
 cls
 echo Running Autotune Strategy Finder...
@@ -1013,38 +970,32 @@ set "selectedFile=%selectedFile%.bat"
 goto service_install
 
 
-:: EDIT USER LISTS =====================
 :edit_user_lists
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\edit_lists.ps1"
 goto menu
 
 
-:: CONFIGURE DNS =======================
 :configure_dns
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\configure_dns.ps1"
 goto menu
 
 
-:: OPTIMIZE BROWSERS ===================
 :optimize_browsers
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\optimize_browsers.ps1"
 goto menu
 
 
-:: OPEN GUI ============================
 :open_gui
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\gui.ps1"
 goto menu
 
 
-:: Get strategy name
 :get_strategy_name
 set "CurrentStrategy="
 for /f "tokens=2*" %%A in ('reg query "HKLM\System\CurrentControlSet\Services\zapret" /v zapret-discord-youtube 2^>nul') do set "CurrentStrategy=Strategy: %%B"
 exit /b
 
 
-:: Utility functions
 
 :PrintGreen
 powershell -NoProfile -Command "Write-Host \"%~1\" -ForegroundColor Green"

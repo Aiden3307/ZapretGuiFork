@@ -1,8 +1,4 @@
-﻿# DNS and DNS-over-HTTPS (DoH) Configurator
-# Must run as Administrator
-
-# Check Admin
-$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+﻿$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "[ERROR] Требуются права Администратора!" -ForegroundColor Red
     Start-Sleep -Seconds 3
@@ -69,19 +65,15 @@ foreach ($adapter in $adapters) {
     Write-Host "Настройка адаптера: $($adapter.Name) ($($adapter.InterfaceDescription))..." -ForegroundColor DarkGray
     try {
         if ($choice -eq "3") {
-            # Reset to DHCP
             Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ResetServerAddresses
             Write-Host "  [OK] Сброшено на DHCP" -ForegroundColor Green
         } else {
-            # Set Static Secure DNS
             Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses ($primaryDNS, $secondaryDNS)
             Write-Host "  [OK] Установлены DNS-сервера: $primaryDNS, $secondaryDNS" -ForegroundColor Green
             
-            # Configure DoH on Windows 11 (Build 22000+)
             $osBuild = [System.Environment]::OSVersion.Version.Build
             if ($osBuild -ge 22000) {
                 Write-Host "  [INFO] Обнаружена Windows 11. Настройка DNS-over-HTTPS (DoH)..." -ForegroundColor Cyan
-                # Windows 11 allows configuring DoH templates for IP addresses
                 Set-DnsClientDohServerAddress -ServerAddress $primaryDNS -DohTemplate $dohPrimaryTemplate -AllowFallbackToUdp $true -ErrorAction SilentlyContinue
                 Set-DnsClientDohServerAddress -ServerAddress $secondaryDNS -DohTemplate $dohSecondaryTemplate -AllowFallbackToUdp $true -ErrorAction SilentlyContinue
                 Write-Host "  [OK] DoH успешно включен для $primaryDNS и $secondaryDNS" -ForegroundColor Green
@@ -94,7 +86,6 @@ foreach ($adapter in $adapters) {
     }
 }
 
-# Flush DNS Cache to apply immediately
 Clear-DnsClientCache
 Write-Host "`nКэш DNS успешно очищен." -ForegroundColor Green
 Write-Host "Настройка завершена! Текущий режим: $modeName" -ForegroundColor Yellow

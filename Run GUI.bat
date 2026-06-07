@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 title Launching ZAPRET GUI...
 cd /d "%~dp0"
 

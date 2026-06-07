@@ -1,1 +1,15 @@
-domain.example.abc
+domain.example
+telegram.org
+t.me
+telegram.me
+twitchcdn.net
+twitch.tv
+ext-twitch.tv
+assets.twitch.tv
+scorecardresearch.com
+live-video.net
+gstatic.com
+jtvnw.net
+amazon-adsystem.com
+cloudfront.net
+ttvnw.net
